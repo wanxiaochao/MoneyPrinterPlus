@@ -29,7 +29,13 @@ from main import main_generate_video_content, main_generate_ai_video, main_gener
     main_get_video_resource, main_generate_subtitle, main_try_test_audio, get_audio_voices, main_try_test_local_audio, \
     main_generate_ai_video_from_img
 from pages.common import common_ui
-from services.sd.sd_service import SDService
+from services.topics.workbench import render_topic_picker
+from services.topics.hot_topics import get_snapshot, resolve_selection
+from services.topics.workflow import audio_configuration_error, media_configuration_error, script_configuration_error, safe_error
+from tools.file_utils import read_yaml
+from config.config import config_example_file
+
+example_config = read_yaml(config_example_file)
 from tools.tr_utils import tr
 
 import os
@@ -73,8 +79,27 @@ def generate_subtitle():
     main_generate_subtitle()
 
 
+def prepare_subject():
+    items = get_snapshot()["items"] if st.session_state.get("topic_mode") == "选择热点" else []
+    subject, source, current = resolve_selection(st.session_state, items)
+    st.session_state["video_subject"] = subject
+    st.session_state["hot_topic_context"] = source
+    st.session_state["topic_input_fingerprint"] = current
+    return current
+
+
 def generate_video_content():
-    main_generate_video_content()
+    try:
+        prepare_subject()
+        error = script_configuration_error(my_config, example_config)
+        if error:
+            st.session_state["topic_script_error"] = error
+            return
+        st.session_state.pop("topic_script_fingerprint", None)
+        main_generate_video_content()
+        st.session_state.pop("topic_script_error", None)
+    except Exception as exc:
+        st.session_state["topic_script_error"] = "文案生成失败：" + safe_error(exc, my_config)
 
 
 def generate_video_dubbing():
@@ -82,7 +107,14 @@ def generate_video_dubbing():
 
 
 def try_test_audio():
-    main_try_test_audio()
+    error = audio_configuration_error(my_config, example_config)
+    if error:
+        st.error(error)
+        return
+    try:
+        main_try_test_audio()
+    except Exception as exc:
+        st.error("配音试听失败：" + safe_error(exc, my_config))
 
 
 def try_test_local_audio():
@@ -90,24 +122,36 @@ def try_test_local_audio():
 
 
 def generate_video(video_generator):
-    save_session_state_to_yaml()
-    resource_provider = my_config['resource']['provider']
-    if resource_provider == 'stableDiffusion':
-        main_generate_ai_video_from_img(video_generator)
-    else:
+    try:
+        current = prepare_subject()
+        if st.session_state.get("topic_script_fingerprint") != current:
+            st.error("当前选题或表达角度已变化，请先生成这条选题的文案。")
+            return
+        error = media_configuration_error(my_config, example_config)
+        if error:
+            st.error(error)
+            return
+        save_session_state_to_yaml()
         main_generate_ai_video(video_generator)
+    except Exception as exc:
+        st.error("视频生成失败：" + safe_error(exc, my_config))
 
 
-st.markdown(f"<h1 style='text-align: center; font-weight:bold; font-family:comic sans ms; padding-top: 0rem;'> \
-            {app_title}</h1>", unsafe_allow_html=True)
-st.markdown("<h2 style='text-align: center;padding-top: 0rem;'>自动短视频生成器</h2>", unsafe_allow_html=True)
+st.title("热点短视频工作台")
+st.caption("选大类与热点 → 云端文案 → 真实素材与云端配音 → 预览导出")
+render_topic_picker()
 
 # LLM区域
 llm_container = st.container(border=True)
 with llm_container:
-    st.subheader(tr("LLM Video Subject generator"))
-    st.info(tr("Please input video subject, then click the generate button to generate the video content"))
-    st.text_input(label=tr("Video Subject"), placeholder=tr("Please input video subject"), key="video_subject")
+    st.subheader("2 生成与修改文案")
+    st.caption(f"文案引擎：{my_config['llm']['provider']} · 围绕已选主题与表达角度生成")
+    error = script_configuration_error(my_config, example_config)
+    if error:
+        st.warning(error)
+        st.page_link("pages/00_settings.py", label="打开模型与服务设置")
+    if st.session_state.get("topic_script_error"):
+        st.error(st.session_state["topic_script_error"])
     llm_columns = st.columns(3)
     video_length_options = {"60": "60字以内", "120": "120字以内", "300": "300字以内", "600": "600字以内"}
     # video_length_options = {"60": "60字以内", "120": "120字以内", "300": "300字以内"}
@@ -115,7 +159,7 @@ with llm_container:
         st.selectbox(label=tr("Video content language"), options=languages, format_func=lambda x: languages.get(x),
                      key="video_language")
     with llm_columns[1]:
-        st.selectbox(label=tr("Video length"), options=video_length_options,
+        st.selectbox(label="口播长度", options=video_length_options,
                      format_func=lambda x: video_length_options.get(x), key="video_length")
         # print(st.session_state.get("video_length"))
     with llm_columns[2]:
@@ -130,32 +174,13 @@ with resource_container:
     st.subheader(tr("Video Source"))
     resource_name = my_config['resource'].get('provider', '')
     st.text(tr("Using Resource:") + resource_name)
-    if resource_name == "stableDiffusion":
-        sd_service = SDService()
-        sd_checkpoints = sd_service.get_checkpoints()
-        llm_columns = st.columns(4)
-        with llm_columns[0]:
-            st.selectbox(label=tr("Check Point"), options=sd_checkpoints,
-                         key="sd_checkpoint")
-        with llm_columns[1]:
-            st.slider(label=tr("Width"), min_value=64, max_value=2048, step=1, value=720, key="sd_width")
-        with llm_columns[2]:
-            st.slider(label=tr("Height"), min_value=64, max_value=2048, step=1, value=1280, key="sd_height")
-        with llm_columns[3]:
-            st.text_input(label=tr("Seed"), value=2008, key="sd_seed")
-        llm_columns = st.columns(4)
-        with llm_columns[0]:
-            sd_samplers = sd_service.get_samples()
-            st.selectbox(label=tr("Sampler"), options=sd_samplers,  key="sd_sample")
-        with llm_columns[1]:
-            sd_schedules = sd_service.get_schedulers()
-            st.selectbox(label=tr("Schedule"), options=sd_schedules,  key="sd_schedule")
-        with llm_columns[2]:
-            st.slider(label=tr("Steps"), min_value=1, max_value=150, step=1, value=20, key="sd_step")
-        with llm_columns[3]:
-            st.slider(label=tr("CFG Scale"), min_value=0.0, max_value=1.0, step=0.1, value=0.7, key="sd_cfg_scale")
+    if resource_name not in ("pexels", "pixabay"):
+        st.warning("请选择 Pexels 或 Pixabay 真实素材库。")
+        st.page_link("pages/00_settings.py", label="打开素材库设置")
 
 # 配音区域
+st.session_state["audio_type"] = "remote"
+st.session_state["recognition_audio_type"] = "remote"
 captioning_container = st.container(border=True)
 with captioning_container:
     # 配音
@@ -163,7 +188,7 @@ with captioning_container:
 
     llm_columns = st.columns(4)
     with llm_columns[0]:
-        st.selectbox(label=tr("Choose TTS audio type"), options=audio_types, format_func=lambda x: audio_types.get(x),
+        st.selectbox(label=tr("Choose TTS audio type"), options=("remote",), format_func=lambda x: audio_types.get(x),
                      key="audio_type")
 
     if st.session_state.get("audio_type") == "remote":
@@ -173,9 +198,10 @@ with captioning_container:
             st.selectbox(label=tr("Audio language"), options=audio_languages,
                          format_func=lambda x: audio_languages.get(x), key="audio_language")
         with llm_columns[1]:
+            voice_options = audio_voice.get(st.session_state.get("audio_language"), {})
             st.selectbox(label=tr("Audio voice"),
-                         options=audio_voice.get(st.session_state.get("audio_language")),
-                         format_func=lambda x: audio_voice.get(st.session_state.get("audio_language")).get(x),
+                         options=voice_options,
+                         format_func=voice_options.get,
                          key="audio_voice")
         with llm_columns[2]:
             st.selectbox(label=tr("Audio speed"),
@@ -183,121 +209,6 @@ with captioning_container:
                          key="audio_speed")
         with llm_columns[3]:
             st.button(label=tr("Testing Audio"), type="primary", on_click=try_test_audio)
-    if st.session_state.get("audio_type") == "local":
-        selected_local_audio_tts_provider = my_config['audio'].get('local_tts', {}).get('provider', '')
-        if not selected_local_audio_tts_provider:
-            selected_local_audio_tts_provider = 'chatTTS'
-        if selected_local_audio_tts_provider == 'chatTTS':
-            llm_columns = st.columns(5)
-            with llm_columns[0]:
-                st.checkbox(label=tr("Refine text"), key="refine_text")
-                st.text_input(label=tr("Refine text Prompt"), placeholder=tr("[oral_2][laugh_0][break_6]"),
-                              key="refine_text_prompt")
-            with llm_columns[1]:
-                st.slider(label=tr("Text Seed"), min_value=1, value=20, max_value=4294967295, step=1,
-                          key="text_seed")
-            with llm_columns[2]:
-                st.slider(label=tr("Audio Temperature"), min_value=0.01, value=0.3, max_value=1.0, step=0.01,
-                          key="audio_temperature")
-            with llm_columns[3]:
-                st.slider(label=tr("top_P"), min_value=0.1, value=0.7, max_value=0.9, step=0.1,
-                          key="audio_top_p")
-            with llm_columns[4]:
-                st.slider(label=tr("top_K"), min_value=1, value=20, max_value=20, step=1,
-                          key="audio_top_k")
-
-            st.checkbox(label=tr("Use random voice"), key="use_random_voice")
-
-            if st.session_state.get("use_random_voice"):
-                llm_columns = st.columns(4)
-                with llm_columns[0]:
-                    st.slider(label=tr("Audio Seed"), min_value=1, value=20, max_value=4294967295, step=1,
-                              key="audio_seed")
-                with llm_columns[1]:
-                    st.selectbox(label=tr("Audio speed"),
-                                 options=["normal", "fast", "faster", "fastest", "slow", "slower", "slowest"],
-                                 key="audio_speed")
-                with llm_columns[2]:
-                    st.button(label=tr("Testing Audio"), type="primary", on_click=try_test_local_audio)
-            else:
-                llm_columns = st.columns(4)
-                with llm_columns[0]:
-                    st.text_input(label=tr("Local Chattts Dir"), placeholder=tr("Input Local Chattts Dir"),
-                                  value=default_chattts_dir,
-                                  key="default_chattts_dir")
-                with llm_columns[1]:
-                    chattts_list = get_file_map_from_dir(st.session_state["default_chattts_dir"], ".pt,.txt")
-                    st.selectbox(label=tr("Audio voice"), key="audio_voice",
-                                 options=chattts_list, format_func=lambda x: chattts_list[x])
-                with llm_columns[2]:
-                    st.selectbox(label=tr("Audio speed"),
-                                 options=["normal", "fast", "faster", "fastest", "slow", "slower", "slowest"],
-                                 key="audio_speed")
-                with llm_columns[3]:
-                    st.button(label=tr("Testing Audio"), type="primary", on_click=try_test_local_audio)
-        if selected_local_audio_tts_provider == 'GPTSoVITS':
-            use_reference_audio = st.checkbox(label=tr("Use reference audio"), key="use_reference_audio")
-            if use_reference_audio:
-                llm_columns = st.columns(4)
-                with llm_columns[0]:
-                    st.file_uploader(label=tr("Reference Audio"), type=["wav", "mp3"], accept_multiple_files=False,
-                                     key="reference_audio")
-                with llm_columns[1]:
-                    st.text_area(label=tr("Reference Audio Text"), placeholder=tr("Input Reference Audio Text"),
-                                 key="reference_audio_text")
-                with llm_columns[2]:
-                    st.selectbox(label=tr("Reference Audio language"), options=GPT_soVITS_languages,
-                                 format_func=lambda x: GPT_soVITS_languages.get(x),
-                                 key="reference_audio_language")
-            llm_columns = st.columns(6)
-            with llm_columns[0]:
-                st.slider(label=tr("Audio Temperature"), min_value=0.01, value=0.3, max_value=1.0, step=0.01,
-                          key="audio_temperature")
-            with llm_columns[1]:
-                st.slider(label=tr("top_P"), min_value=0.1, value=0.7, max_value=0.9, step=0.1,
-                          key="audio_top_p")
-            with llm_columns[2]:
-                st.slider(label=tr("top_K"), min_value=1, value=20, max_value=20, step=1,
-                          key="audio_top_k")
-            with llm_columns[3]:
-                st.selectbox(label=tr("Audio speed"),
-                             options=["normal", "fast", "faster", "fastest", "slow", "slower", "slowest"],
-                             key="audio_speed")
-            with llm_columns[4]:
-                st.selectbox(label=tr("Inference Audio language"),
-                             options=GPT_soVITS_languages, format_func=lambda x: GPT_soVITS_languages.get(x),
-                             key="inference_audio_language")
-            with llm_columns[5]:
-                st.button(label=tr("Testing Audio"), type="primary", on_click=try_test_local_audio)
-
-        if selected_local_audio_tts_provider == 'CosyVoice':
-            use_reference_audio = st.checkbox(label=tr("Use reference audio"), key="use_reference_audio")
-            if use_reference_audio:
-                llm_columns = st.columns(2)
-                with llm_columns[0]:
-                    # st.file_uploader(label=tr("Reference Audio"), type=["wav", "mp3"], accept_multiple_files=False,
-                    #                  key="reference_audio")
-                    st.text_input(label=tr("Reference Audio"), placeholder=tr("Input Reference Audio File Path"),
-                      key="reference_audio_file_path")
-                with llm_columns[1]:
-                    st.text_area(label=tr("Reference Audio Text"), placeholder=tr("Input Reference Audio Text"),
-                                 key="reference_audio_text")
-            else:
-                llm_columns = st.columns(1)
-                st.selectbox(label=tr("Reference Audio language"), options=CosyVoice_voice,
-                            format_func=lambda x: CosyVoice_voice.get(x),
-                            key="reference_audio_language")
-            llm_columns = st.columns(3)
-            with llm_columns[0]:
-                st.slider(label=tr("Text Seed"), min_value=1, value=20, max_value=4294967295, step=1,
-                          key="text_seed")
-            with llm_columns[1]:
-                st.selectbox(label=tr("Audio speed"),
-                             options=["normal", "fast", "faster", "fastest", "slow", "slower", "slowest"],
-                             key="audio_speed")
-            with llm_columns[2]:
-                st.button(label=tr("Testing Audio"), type="primary", on_click=try_test_local_audio)
-
 recognition_container = st.container(border=True)
 with recognition_container:
     # 配音
@@ -305,7 +216,7 @@ with recognition_container:
 
     llm_columns = st.columns(4)
     with llm_columns[0]:
-        st.selectbox(label=tr("Choose recognition type"), options=audio_types, format_func=lambda x: audio_types.get(x),
+        st.selectbox(label=tr("Choose recognition type"), options=("remote",), format_func=lambda x: audio_types.get(x),
                      key="recognition_audio_type")
 
 # 背景音乐

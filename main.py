@@ -96,24 +96,25 @@ def get_audio_service():
 
 
 def main_generate_video_content():
-    print("main_generate_video_content begin")
     topic = get_must_session_option('video_subject', "请输入要生成的主题")
     if topic is None:
         return
     video_language = st.session_state.get('video_language')
     video_length = st.session_state.get('video_length')
-
-    llm_provider = my_config['llm']['provider']
-    print("llm_provider:", llm_provider)
-    llm_service = get_llm_provider(llm_provider)
-    st.session_state["video_content"] = llm_service.generate_content(topic,
-                                                                     llm_service.topic_prompt_template,
-                                                                     video_language,
-                                                                     video_length)
-    st.session_state["video_keyword"] = llm_service.generate_content(st.session_state["video_content"],
-                                                                     prompt_template=llm_service.keyword_prompt_template)
-    print("keyword:", st.session_state.get("video_keyword"))
-    print("main_generate_video_content end")
+    llm_service = get_llm_provider(my_config['llm']['provider'])
+    prompt = llm_service.topic_prompt_template
+    if st.session_state.get("topic_workbench_enabled"):
+        from services.topics.workflow import script_request
+        topic, prompt = script_request(topic, st.session_state.get("topic_category", "全部热点"),
+                                       st.session_state.get("topic_angle", "快速解读"),
+                                       st.session_state.get("hot_topic_context"))
+        video_language = {"zh-CN": "简体中文", "zh-TW": "繁體中文", "en": "English"}.get(video_language, video_language)
+    content = llm_service.generate_content(topic, prompt, video_language, video_length)
+    keywords = llm_service.generate_content(content, prompt_template=llm_service.keyword_prompt_template)
+    st.session_state["video_content"] = content
+    st.session_state["video_keyword"] = keywords
+    if st.session_state.get("topic_workbench_enabled"):
+        st.session_state["topic_script_fingerprint"] = st.session_state.get("topic_input_fingerprint")
 
 
 def main_try_test_local_audio():
