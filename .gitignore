@@ -22,3 +22,12 @@ sensevoice/*
 chromedriver/*
 chromedriver-mac-arm64/
 !README.md
+# Local Mac deployment
+.venv/
+.local-bin/
+.local-logs/
+.env
+*.log
+*.download
+*.assembled
+reports/local-*
