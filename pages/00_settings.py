@@ -26,14 +26,14 @@ from config.config import my_config, save_config, languages, test_config, local_
     local_audio_recognition_providers, local_audio_recognition_fasterwhisper_module_names, \
     local_audio_recognition_fasterwhisper_device_types, local_audio_recognition_fasterwhisper_compute_types, \
     delete_first_visit_session_state, app_title
-from pages.common import common_ui
+from pages.common import common_ui, page_header
 from tools.tr_utils import tr
 
 delete_first_visit_session_state("all_first_visit")
 
 common_ui()
 
-st.title("模型与服务设置")
+page_header("模型与服务设置")
 st.caption("工作台使用云端文案、真实视频素材和云端配音。字段按 Enter 或离开后自动保存。")
 
 if 'ui_language' not in st.session_state:

@@ -28,7 +28,7 @@ from config.config import my_config, save_config, languages, audio_languages, tr
 from main import main_generate_video_content, main_generate_ai_video, main_generate_video_dubbing, \
     main_get_video_resource, main_generate_subtitle, main_try_test_audio, get_audio_voices, main_try_test_local_audio, \
     main_generate_ai_video_from_img
-from pages.common import common_ui
+from pages.common import common_ui, page_header
 from services.topics.workbench import render_topic_picker
 from services.topics.hot_topics import get_snapshot, resolve_selection
 from services.topics.workflow import audio_configuration_error, media_configuration_error, script_configuration_error, safe_error
@@ -137,7 +137,7 @@ def generate_video(video_generator):
         st.error("视频生成失败：" + safe_error(exc, my_config))
 
 
-st.title("热点短视频工作台")
+page_header("热点短视频工作台")
 st.caption("选大类与热点 → 云端文案 → 真实素材与云端配音 → 预览导出")
 render_topic_picker()
 

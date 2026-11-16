@@ -28,7 +28,7 @@ import streamlit as st
 from config.config import transition_types, fade_list, audio_languages, audio_types, load_session_state_from_yaml, \
     save_session_state_to_yaml, app_title, GPT_soVITS_languages, CosyVoice_voice, my_config
 from main import main_generate_ai_video_for_mix, main_try_test_audio, get_audio_voices, main_try_test_local_audio
-from pages.common import common_ui
+from pages.common import common_ui, page_header
 from tools.tr_utils import tr
 from tools.utils import get_file_map_from_dir
 
@@ -97,9 +97,7 @@ def generate_video_for_mix(video_generator):
 
 common_ui()
 
-st.markdown(f"<h1 style='text-align: center; font-weight:bold; font-family:comic sans ms; padding-top: 0rem;'> \
-            {app_title}</h1>", unsafe_allow_html=True)
-st.markdown("<h2 style='text-align: center;padding-top: 0rem;'>视频批量混剪工具</h2>", unsafe_allow_html=True)
+page_header("视频批量混剪工具")
 
 # 场景设置
 mix_video_container = st.container(border=True)

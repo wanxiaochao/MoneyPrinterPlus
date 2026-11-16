@@ -30,7 +30,9 @@ Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查�
 #
 
 import streamlit as st
+from html import escape
 
+from config.config import app_title
 from tools.tr_utils import tr
 
 
@@ -57,3 +59,12 @@ def common_ui():
 
     with st.sidebar:
         st.markdown('---')
+
+
+def page_header(title):
+    st.markdown(
+        f"<h1 style='text-align: center; font-weight:bold; font-family:comic sans ms; padding-top: 0rem;'>"
+        f"{escape(app_title)}</h1>", unsafe_allow_html=True)
+    st.markdown(
+        f"<h2 style='text-align: center; padding-top: 0rem;'>{escape(title)}</h2>",
+        unsafe_allow_html=True)
