@@ -47,8 +47,22 @@ def common_ui():
                            'Get help': "https://www.flydean.com"
                        })
 
-    st.sidebar.page_link("pages/00_settings.py", label="模型与服务设置")
+    st.markdown("""<style>
+    .block-container {max-width: 1280px; padding: 1.6rem 1.5rem 2rem;}
+    [data-testid="stVerticalBlockBorderWrapper"] {border-radius: 14px;}
+    [data-testid="stCaptionContainer"] {color: #64748b; line-height: 1.6;}
+    [data-testid="stSidebar"] {background: #f6f8fc; min-width: 14rem; max-width: 16rem;}
+    .app-brand {font-size: 1.1rem; font-weight: 700; color: #64748b; margin: 0 0 .35rem;}
+    .app-heading {font-size: 1.9rem; font-weight: 750; margin: 0 0 .5rem; padding: 0;}
+    h3 {font-size: 1.15rem; padding-top: .15rem;}
+    @media (max-width: 640px) {
+      .block-container {padding: 1.1rem 1rem 2rem;}
+      .app-heading {font-size: 1.55rem;}
+    }
+    </style>""", unsafe_allow_html=True)
+
     st.sidebar.page_link("pages/01_auto_video.py", label="热点短视频工作台")
+    st.sidebar.page_link("pages/00_settings.py", label="模型与服务设置")
     st.sidebar.page_link("pages/02_mix_video.py", label=tr("Mix Video"))
     st.sidebar.page_link("pages/02_merge_video.py", label=tr("Merge Video"))
     with st.sidebar.expander("其他工具"):
@@ -63,8 +77,8 @@ def common_ui():
 
 def page_header(title):
     st.markdown(
-        f"<h1 style='text-align: center; font-weight:bold; font-family:comic sans ms; padding-top: 0rem;'>"
+        f"<h1 class='app-brand'>"
         f"{escape(app_title)}</h1>", unsafe_allow_html=True)
     st.markdown(
-        f"<h2 style='text-align: center; padding-top: 0rem;'>{escape(title)}</h2>",
+        f"<h2 class='app-heading'>{escape(title)}</h2>",
         unsafe_allow_html=True)

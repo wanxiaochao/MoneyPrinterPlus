@@ -16,24 +16,41 @@ def remember_manual_subject():
         st.session_state["topic_manual_draft"] = st.session_state.get("video_subject", "")
 
 
+def suggest_topic():
+    options = st.session_state.get("topic_suggestion_ids", [])
+    if options:
+        current = st.session_state.get("topic_hot_choice")
+        index = options.index(current) + 1 if current in options else 0
+        st.session_state["topic_hot_choice"] = options[index % len(options)]
+
+
 def render_topic_picker():
     state = st.session_state
     state.setdefault("topic_manual_draft", state.get("video_subject", ""))
     with st.container(border=True):
         st.subheader("1 选择内容与热点")
-        st.radio("选题方式", ("选择热点", "手动输入"), key="topic_mode", horizontal=True)
-        st.selectbox("内容大类", CATEGORIES, key="topic_category")
+        mode, category = st.columns([1.1, 1])
+        with mode:
+            st.radio("选题方式", ("选择热点", "手动输入"), key="topic_mode", horizontal=True)
+        with category:
+            st.selectbox("内容大类", CATEGORIES, key="topic_category")
         source = None
         if state["topic_mode"] == "选择热点":
-            refresh = st.button("刷新热点", key="refresh_hot_topics")
+            suggest, update = st.columns(2)
+            with update:
+                refresh = st.button("刷新热点", key="refresh_hot_topics", use_container_width=True)
             with st.spinner("正在获取热点..."):
                 snapshot = get_snapshot(force=refresh)
             items = filter_topics(snapshot["items"], state["topic_category"])
+            state["topic_suggestion_ids"] = [i["id"] for i in items]
+            with suggest:
+                st.button("帮我选一个 / 换一个", key="suggest_hot_topic", on_click=suggest_topic,
+                          disabled=not items, use_container_width=True)
             if snapshot["stale"]:
                 st.warning("来源暂时不可用，当前显示上次成功获取的热点；获取时间保持原值。")
-            st.caption(f"{state['topic_category']}：{len(items)} 条候选 · 获取时间 {_time(snapshot['collected_at'])}")
-            st.caption("大类可能交叉；其他候选可以在“全部热点”中查看。")
-            with st.expander("来源状态"):
+            st.caption(f"{len(items)} 条热点 · 更新于 {_time(snapshot['collected_at'])}")
+            details_panel = st.expander("热点来源与详情")
+            with details_panel:
                 for result in snapshot["sources"]:
                     if result["ok"]:
                         st.write(f"{result['platform']}：已获取 · {_time(result['fetched_at'])}")
@@ -57,18 +74,21 @@ def render_topic_picker():
                 st.info("这个大类暂时没有候选。可以切换大类、刷新，或使用手动输入。")
             state["video_subject"] = source["title"] if source else ""
             if source:
+                st.write(source["title"])
                 details = [f"来源：{source['platform']}", f"获取时间：{_time(source['collected_at'])}"]
                 for metric, title in (("hotScore", "热搜指数"), ("view", "播放"), ("like", "点赞")):
                     if metric in source["metrics"]:
                         details.append(f"{title}：{source['metrics'][metric]}")
-                st.caption(" · ".join(details))
-                if source["url"]:
-                    st.link_button("查看原始热点", source["url"])
+                with details_panel:
+                    st.caption(" · ".join(details))
+                    if source["url"]:
+                        st.link_button("查看原始热点", source["url"])
         elif state.get("topic_previous_mode") != "手动输入":
             state["video_subject"] = state["topic_manual_draft"]
         state["topic_previous_mode"] = state["topic_mode"]
-        st.text_input("视频主题", placeholder="输入想讲的具体主题", key="video_subject",
-                      disabled=state["topic_mode"] == "选择热点", on_change=remember_manual_subject)
+        if state["topic_mode"] == "手动输入":
+            st.text_input("视频主题", placeholder="输入想讲的具体主题", key="video_subject",
+                          on_change=remember_manual_subject)
         st.selectbox("表达角度", tuple(ANGLE_RULES), key="topic_angle")
         st.caption(ANGLE_RULES[state["topic_angle"]])
         state["hot_topic_context"] = source
@@ -78,6 +98,7 @@ def render_topic_picker():
             state["video_content"] = ""
             state["video_keyword"] = ""
             state.pop("topic_script_fingerprint", None)
+            state.pop("topic_keywords_digest", None)
             state.pop("result_video_file", None)
             state.pop("topic_script_error", None)
         state["topic_input_fingerprint"] = current

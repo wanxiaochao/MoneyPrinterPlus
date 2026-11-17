@@ -215,10 +215,26 @@ class PickerUITests(unittest.TestCase):
         self.assertFalse(app.exception)
         self.assertEqual(app.session_state["video_subject"], "")
 
+    def test_suggestion_selects_current_category_and_can_cycle(self):
+        app = self.picker()
+        app.button(key="suggest_hot_topic").click().run()
+        self.assertEqual(app.session_state["video_subject"], "AI 手机发布新功能")
+        app.button(key="suggest_hot_topic").click().run()
+        self.assertEqual(app.session_state["video_subject"], "健身后如何保持衣物干爽")
+
 
 class WorkflowUITests(unittest.TestCase):
-    setUp = PickerUITests.setUp
-    tearDown = PickerUITests.tearDown
+    def setUp(self):
+        PickerUITests.setUp(self)
+        self.preferences = patch("services.topics.preferences.save_preferences")
+        self.history = patch("services.topics.preferences.recent_videos", return_value=[])
+        self.preferences.start()
+        self.history.start()
+
+    def tearDown(self):
+        self.preferences.stop()
+        self.history.stop()
+        PickerUITests.tearDown(self)
 
     def workbench(self):
         from streamlit.testing.v1 import AppTest
@@ -250,7 +266,7 @@ class WorkflowUITests(unittest.TestCase):
         config["llm"]["DeepSeek"]["api_key"] = "test-only-not-a-real-key"
         with patch.dict(my_config, config, clear=True), patch.object(main, "get_llm_provider") as provider:
             service = provider.return_value
-            service.generate_content.side_effect = ["测试口播", "smartphone"]
+            service.generate_content.return_value = json.dumps({"narration": "测试口播", "keywords": ["smartphone"]})
             app = self.workbench()
             app.selectbox(key="topic_category").select("科技数码").run()
             app.selectbox(key="topic_hot_choice").select("tech").run()
@@ -258,6 +274,7 @@ class WorkflowUITests(unittest.TestCase):
             next(b for b in app.button if b.label == "生成视频文案").click().run()
             self.assertFalse(app.exception)
             provider.assert_called_once_with("DeepSeek")
+            self.assertEqual(service.generate_content.call_count, 1)
             args = service.generate_content.call_args_list[0].args
             payload = json.loads(args[0])
             self.assertEqual(payload["subject"], "AI 手机发布新功能")
@@ -276,6 +293,43 @@ class WorkflowUITests(unittest.TestCase):
             with self.subTest(page=page):
                 app = AppTest.from_file("gui.py").switch_page(page).run()
                 self.assertFalse(app.exception)
+
+    def test_one_click_runs_once_and_preset_applies(self):
+        import main
+        from config.config import my_config
+        import tempfile
+        from pathlib import Path
+        config = copy.deepcopy(my_config)
+        config["llm"]["provider"] = "DeepSeek"
+        config["llm"]["DeepSeek"]["api_key"] = "test-user-llm"
+        config["resource"]["provider"] = "pexels"
+        config["resource"]["pexels"]["api_key"] = "test-user-material"
+        config["audio"]["provider"] = "Azure"
+        config["audio"]["Azure"]["speech_key"] = "test-user-speech"
+        config["audio"]["Azure"]["service_region"] = "eastasia"
+        with tempfile.TemporaryDirectory() as directory, patch.dict(my_config, config, clear=True), \
+                patch.object(main, "get_llm_provider") as provider, \
+                patch.object(main, "main_generate_ai_video") as video, \
+                patch("services.topics.preferences.record_video"):
+            provider.return_value.generate_content.return_value = json.dumps({"narration": "测试口播", "keywords": ["smartphone"]})
+            output = Path(directory) / "unit-mock.mp4"
+            output.write_bytes(b"unit mock video")
+            def complete(_):
+                import streamlit as st
+                st.session_state["result_video_file"] = str(output)
+            video.side_effect = complete
+            app = self.workbench()
+            app.button(key="suggest_hot_topic").click().run()
+            app.selectbox(key="output_preset").select("横屏解读").run()
+            self.assertEqual(app.session_state["video_layout"], "landscape")
+            self.assertEqual(app.session_state["video_size"], "1280x720")
+            app.button(key="generate_video").click().run()
+            self.assertFalse(app.exception)
+            self.assertNotIn("topic_script_error", app.session_state)
+            video.assert_called_once()
+            self.assertEqual(provider.return_value.generate_content.call_count, 1)
+            app.run()
+            video.assert_called_once()
 
 
 if __name__ == "__main__":

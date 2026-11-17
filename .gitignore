@@ -31,3 +31,6 @@ chromedriver-mac-arm64/
 *.download
 *.assembled
 reports/local-*
+config/workbench-preferences.json
+config/workbench-history.json
+config/workbench-*.tmp

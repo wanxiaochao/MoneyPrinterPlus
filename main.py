@@ -104,17 +104,34 @@ def main_generate_video_content():
     llm_service = get_llm_provider(my_config['llm']['provider'])
     prompt = llm_service.topic_prompt_template
     if st.session_state.get("topic_workbench_enabled"):
-        from services.topics.workflow import script_request
+        from services.topics.workflow import script_request, parse_script_result
         topic, prompt = script_request(topic, st.session_state.get("topic_category", "全部热点"),
                                        st.session_state.get("topic_angle", "快速解读"),
-                                       st.session_state.get("hot_topic_context"))
+                                       st.session_state.get("hot_topic_context"), structured=True)
         video_language = {"zh-CN": "简体中文", "zh-TW": "繁體中文", "en": "English"}.get(video_language, video_language)
-    content = llm_service.generate_content(topic, prompt, video_language, video_length)
-    keywords = llm_service.generate_content(content, prompt_template=llm_service.keyword_prompt_template)
+        raw = llm_service.generate_content(topic, prompt, video_language, video_length)
+        content, keywords = parse_script_result(raw)
+    else:
+        content = llm_service.generate_content(topic, prompt, video_language, video_length)
+        keywords = llm_service.generate_content(content, prompt_template=llm_service.keyword_prompt_template)
     st.session_state["video_content"] = content
     st.session_state["video_keyword"] = keywords
     if st.session_state.get("topic_workbench_enabled"):
+        from services.topics.automation import text_digest
         st.session_state["topic_script_fingerprint"] = st.session_state.get("topic_input_fingerprint")
+        st.session_state["topic_keywords_digest"] = text_digest(content)
+        st.session_state["topic_script_options"] = {key: st.session_state.get(key) for key in ("video_language", "video_length")}
+
+
+def main_generate_video_keywords():
+    from services.topics.automation import text_digest
+    content = st.session_state.get("video_content", "").strip()
+    service = get_llm_provider(my_config['llm']['provider'])
+    keywords = service.generate_content(content, prompt_template=service.keyword_prompt_template).strip()
+    if not keywords:
+        raise ValueError("未能生成素材关键词，请重试。")
+    st.session_state["video_keyword"] = keywords
+    st.session_state["topic_keywords_digest"] = text_digest(content)
 
 
 def main_try_test_local_audio():

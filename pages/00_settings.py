@@ -201,127 +201,180 @@ def set_llm_model_name(provider, key):
     save_config()
 
 
-# 设置language
-display_languages = []
-selected_index = 0
-for i, code in enumerate(languages.keys()):
-    display_languages.append(f"{code} - {languages[code]}")
-    if f"{code} - {languages[code]}" == st.session_state['ui_language']:
-        selected_index = i
-# print("selected_index:", selected_index)
-selected_language = st.selectbox(tr("Language"), options=display_languages,
-                                 index=selected_index, key='ui_language', on_change=set_ui_language)
-# 设置资源
-resource_container = st.container(border=True)
-with resource_container:
-    resource_providers = ['pexels', 'pixabay', 'stableDiffusion', 'comfyUI']
-    selected_resource_provider = my_config['resource']['provider']
-    selected_resource_provider_index = 0
-    for i, provider in enumerate(resource_providers):
-        if provider == selected_resource_provider:
-            selected_resource_provider_index = i
-            break
 
-    llm_provider = st.selectbox(tr("Resource Provider"), options=resource_providers,
-                                index=selected_resource_provider_index,
-                                key='resource_provider', on_change=set_resource_provider)
+llm_tab, resource_tab, audio_tab, other_tab = st.tabs(["文案服务", "素材服务", "配音服务", "其他设置"])
 
-    # 设置资源key
-    key_panels = st.columns(3)
-    if selected_resource_provider == 'pexels':
-        with key_panels[0]:
-            pexels_api_key = my_config['resource']['pexels']['api_key']
-            pexels_api_key = st.text_input(tr("Pexels API Key"), value=pexels_api_key, type="password",
-                                           key='pexels_api_key',
-                                           on_change=save_pexels_api_key)
-    if selected_resource_provider == 'pixabay':
-        with key_panels[0]:
-            pixabay_api_key = my_config['resource']['pixabay']['api_key']
-            pixabay_api_key = st.text_input(tr("Pixabay API Key"), value=pixabay_api_key, type="password",
-                                            key='pixabay_api_key', on_change=save_pixabay_api_key)
-    if selected_resource_provider == 'stableDiffusion':
-        with key_panels[0]:
-            sd_api_user_name = my_config['resource'].get('stableDiffusion', {}).get('user_name', '')
-            st.text_input(tr("Stable Diffusion API User Name"), value=sd_api_user_name,
-                          key='stableDiffusion_api_user_name', on_change=save_stable_diffusion_api_user_name)
-        with key_panels[1]:
-            sd_api_password = my_config['resource'].get('stableDiffusion', {}).get('password', '')
-            st.text_input(tr("Stable Diffusion API Password"), type="password", value=sd_api_password,
-                          key='stableDiffusion_api_password', on_change=save_stable_diffusion_api_password)
-        with key_panels[2]:
-            sd_api_address = my_config['resource'].get('stableDiffusion', {}).get('server_address', '')
-            st.text_input(tr("Stable Diffusion API Server Address"), value=sd_api_address,
-                          key='stableDiffusion_api_server_address', on_change=save_stable_diffusion_api_server_address)
+with llm_tab:
+    # 设置默认的LLM
+    llm_container = st.container(border=True)
+    with (llm_container):
+        llm_providers = ['OpenAI', 'Moonshot', 'Azure', 'Qianfan', 'Baichuan', 'Tongyi', 'DeepSeek', 'Ollama']
+        saved_llm_provider = my_config['llm']['provider']
+        saved_llm_provider_index = 0
+        for i, provider in enumerate(llm_providers):
+            if provider == saved_llm_provider:
+                saved_llm_provider_index = i
+                break
 
-# 设置语音
-audio_container = st.container(border=True)
-with audio_container:
-    st.info(tr("Audio Provider Info"))
+        llm_provider = st.selectbox(tr("LLM Provider"), options=llm_providers, index=saved_llm_provider_index,
+                                    key='llm_provider', on_change=set_llm_provider)
 
-    # remote Audio config
-    audio_providers = ['Azure', 'Ali', 'Tencent']
-    selected_audio_provider = my_config['audio']['provider']
-    selected_audio_provider_index = 0
-    for i, provider in enumerate(audio_providers):
-        if provider == selected_audio_provider:
-            selected_audio_provider_index = i
-            break
+        # 设置llm的值：
+        with st.expander(llm_provider, expanded=True):
+            tips = f"""
+                   ##### {llm_provider} 配置信息
+                   """
+            st.info(tips)
+            if llm_provider != 'Ollama':
+                st_llm_api_key = st.text_input(tr("API Key"),
+                                               value=my_config['llm'].get(llm_provider, {}).get('api_key', ''),
+                                               type="password", key=llm_provider + '_api_key', on_change=set_llm_key,
+                                               args=(llm_provider, llm_provider + '_api_key'))
 
-    audio_provider = st.selectbox(tr("Remote Audio Provider"), options=audio_providers,
-                                  index=selected_audio_provider_index,
-                                  key='audio_provider', on_change=set_audio_provider)
-    with st.expander(audio_provider, expanded=True):
-        if audio_provider == 'Azure':
-            st.info(tr("Audio Azure config"))
-            audio_columns = st.columns(2)
-            with audio_columns[0]:
-                st.text_input(label=tr("Speech Key"), type="password",
-                              value=my_config['audio'].get(audio_provider, {}).get('speech_key', ''),
-                              on_change=set_audio_key, key=audio_provider + "_speech_key",
-                              args=(audio_provider, audio_provider + '_speech_key'))
-            with audio_columns[1]:
-                st.text_input(label=tr("Service Region"), type="password",
-                              value=my_config['audio'].get(audio_provider, {}).get('service_region', ''),
-                              on_change=set_audio_region,
-                              key=audio_provider + "_service_region",
-                              args=(audio_provider, audio_provider + '_service_region'))
-        if audio_provider == 'Ali':
-            st.info(tr("Audio Ali config"))
-            audio_columns = st.columns(3)
-            with audio_columns[0]:
-                st.text_input(label=tr("Access Key ID"), type="password",
-                              value=my_config['audio'].get(audio_provider, {}).get('access_key_id', ''),
-                              on_change=set_audio_access_key_id, key=audio_provider + "_access_key_id",
-                              args=(audio_provider, audio_provider + '_access_key_id'))
-            with audio_columns[1]:
-                st.text_input(label=tr("Access Key Secret"), type="password",
-                              value=my_config['audio'].get(audio_provider, {}).get('access_key_secret', ''),
-                              on_change=set_audio_access_key_secret, key=audio_provider + "_access_key_secret",
-                              args=(audio_provider, audio_provider + '_access_key_secret'))
-            with audio_columns[2]:
-                st.text_input(label=tr("App Key"), type="password",
-                              value=my_config['audio'].get(audio_provider, {}).get('app_key', ''),
-                              on_change=set_audio_app_key, key=audio_provider + "_app_key",
-                              args=(audio_provider, audio_provider + '_app_key'))
-        if audio_provider == 'Tencent':
-            st.info(tr("Audio Tencent config"))
-            audio_columns = st.columns(3)
-            with audio_columns[0]:
-                st.text_input(label=tr("Access Key ID"), type="password",
-                              value=my_config['audio'].get(audio_provider, {}).get('access_key_id', ''),
-                              on_change=set_audio_access_key_id, key=audio_provider + "_access_key_id",
-                              args=(audio_provider, audio_provider + '_access_key_id'))
-            with audio_columns[1]:
-                st.text_input(label=tr("Access Key Secret"), type="password",
-                              value=my_config['audio'].get(audio_provider, {}).get('access_key_secret', ''),
-                              on_change=set_audio_access_key_secret, key=audio_provider + "_access_key_secret",
-                              args=(audio_provider, audio_provider + '_access_key_secret'))
-            with audio_columns[2]:
-                st.text_input(label=tr("App ID"), type="password",
-                              value=my_config['audio'].get(audio_provider, {}).get('app_key', ''),
-                              on_change=set_audio_app_key, key=audio_provider + "_app_key",
-                              args=(audio_provider, audio_provider + '_app_key'))
+            if llm_provider == 'Qianfan':
+                st_llm_base_url = st.text_input(tr("Secret Key"),
+                                                value=my_config['llm'].get(llm_provider, {}).get('secret_key', ''),
+                                                type="password", key=llm_provider + '_secret_key', on_change=set_llm_sk,
+                                                args=(llm_provider, llm_provider + '_secret_key'))
+            else:
+                if llm_provider == 'Azure' or llm_provider == 'DeepSeek' or llm_provider == 'Ollama':
+                    st_llm_base_url = st.text_input(tr("Base Url"),
+                                                    value=my_config['llm'].get(llm_provider, {}).get('base_url', ''),
+                                                    key=llm_provider + '_base_url',
+                                                    on_change=set_llm_base_url,
+                                                    args=(llm_provider, llm_provider + '_base_url'))
 
+            st_llm_model_name = st.text_input(tr("Model Name"),
+                                              value=my_config['llm'].get(llm_provider, {}).get('model_name', ''),
+                                              key=llm_provider + '_model_name', on_change=set_llm_model_name,
+                                              args=(llm_provider, llm_provider + '_model_name'))
+
+with resource_tab:
+    # 设置资源
+    resource_container = st.container(border=True)
+    with resource_container:
+        resource_providers = ['pexels', 'pixabay', 'stableDiffusion', 'comfyUI']
+        selected_resource_provider = my_config['resource']['provider']
+        selected_resource_provider_index = 0
+        for i, provider in enumerate(resource_providers):
+            if provider == selected_resource_provider:
+                selected_resource_provider_index = i
+                break
+
+        llm_provider = st.selectbox(tr("Resource Provider"), options=resource_providers,
+                                    index=selected_resource_provider_index,
+                                    key='resource_provider', on_change=set_resource_provider)
+
+        # 设置资源key
+        key_panels = st.columns(3 if selected_resource_provider == 'stableDiffusion' else 1)
+        if selected_resource_provider == 'pexels':
+            with key_panels[0]:
+                pexels_api_key = my_config['resource']['pexels']['api_key']
+                pexels_api_key = st.text_input(tr("Pexels API Key"), value=pexels_api_key, type="password",
+                                               key='pexels_api_key',
+                                               on_change=save_pexels_api_key)
+        if selected_resource_provider == 'pixabay':
+            with key_panels[0]:
+                pixabay_api_key = my_config['resource']['pixabay']['api_key']
+                pixabay_api_key = st.text_input(tr("Pixabay API Key"), value=pixabay_api_key, type="password",
+                                                key='pixabay_api_key', on_change=save_pixabay_api_key)
+        if selected_resource_provider == 'stableDiffusion':
+            with key_panels[0]:
+                sd_api_user_name = my_config['resource'].get('stableDiffusion', {}).get('user_name', '')
+                st.text_input(tr("Stable Diffusion API User Name"), value=sd_api_user_name,
+                              key='stableDiffusion_api_user_name', on_change=save_stable_diffusion_api_user_name)
+            with key_panels[1]:
+                sd_api_password = my_config['resource'].get('stableDiffusion', {}).get('password', '')
+                st.text_input(tr("Stable Diffusion API Password"), type="password", value=sd_api_password,
+                              key='stableDiffusion_api_password', on_change=save_stable_diffusion_api_password)
+            with key_panels[2]:
+                sd_api_address = my_config['resource'].get('stableDiffusion', {}).get('server_address', '')
+                st.text_input(tr("Stable Diffusion API Server Address"), value=sd_api_address,
+                              key='stableDiffusion_api_server_address', on_change=save_stable_diffusion_api_server_address)
+
+
+with audio_tab:
+    # 设置语音
+    audio_container = st.container(border=True)
+    with audio_container:
+        st.info(tr("Audio Provider Info"))
+
+        # remote Audio config
+        audio_providers = ['Azure', 'Ali', 'Tencent']
+        selected_audio_provider = my_config['audio']['provider']
+        selected_audio_provider_index = 0
+        for i, provider in enumerate(audio_providers):
+            if provider == selected_audio_provider:
+                selected_audio_provider_index = i
+                break
+
+        audio_provider = st.selectbox(tr("Remote Audio Provider"), options=audio_providers,
+                                      index=selected_audio_provider_index,
+                                      key='audio_provider', on_change=set_audio_provider)
+        with st.expander(audio_provider, expanded=True):
+            if audio_provider == 'Azure':
+                st.info(tr("Audio Azure config"))
+                audio_columns = st.columns(2)
+                with audio_columns[0]:
+                    st.text_input(label=tr("Speech Key"), type="password",
+                                  value=my_config['audio'].get(audio_provider, {}).get('speech_key', ''),
+                                  on_change=set_audio_key, key=audio_provider + "_speech_key",
+                                  args=(audio_provider, audio_provider + '_speech_key'))
+                with audio_columns[1]:
+                    st.text_input(label=tr("Service Region"),
+                                  value=my_config['audio'].get(audio_provider, {}).get('service_region', ''),
+                                  on_change=set_audio_region,
+                                  key=audio_provider + "_service_region",
+                                  args=(audio_provider, audio_provider + '_service_region'))
+            if audio_provider == 'Ali':
+                st.info(tr("Audio Ali config"))
+                audio_columns = st.columns(3)
+                with audio_columns[0]:
+                    st.text_input(label=tr("Access Key ID"), type="password",
+                                  value=my_config['audio'].get(audio_provider, {}).get('access_key_id', ''),
+                                  on_change=set_audio_access_key_id, key=audio_provider + "_access_key_id",
+                                  args=(audio_provider, audio_provider + '_access_key_id'))
+                with audio_columns[1]:
+                    st.text_input(label=tr("Access Key Secret"), type="password",
+                                  value=my_config['audio'].get(audio_provider, {}).get('access_key_secret', ''),
+                                  on_change=set_audio_access_key_secret, key=audio_provider + "_access_key_secret",
+                                  args=(audio_provider, audio_provider + '_access_key_secret'))
+                with audio_columns[2]:
+                    st.text_input(label=tr("App Key"), type="password",
+                                  value=my_config['audio'].get(audio_provider, {}).get('app_key', ''),
+                                  on_change=set_audio_app_key, key=audio_provider + "_app_key",
+                                  args=(audio_provider, audio_provider + '_app_key'))
+            if audio_provider == 'Tencent':
+                st.info(tr("Audio Tencent config"))
+                audio_columns = st.columns(3)
+                with audio_columns[0]:
+                    st.text_input(label=tr("Access Key ID"), type="password",
+                                  value=my_config['audio'].get(audio_provider, {}).get('access_key_id', ''),
+                                  on_change=set_audio_access_key_id, key=audio_provider + "_access_key_id",
+                                  args=(audio_provider, audio_provider + '_access_key_id'))
+                with audio_columns[1]:
+                    st.text_input(label=tr("Access Key Secret"), type="password",
+                                  value=my_config['audio'].get(audio_provider, {}).get('access_key_secret', ''),
+                                  on_change=set_audio_access_key_secret, key=audio_provider + "_access_key_secret",
+                                  args=(audio_provider, audio_provider + '_access_key_secret'))
+                with audio_columns[2]:
+                    st.text_input(label=tr("App ID"), type="password",
+                                  value=my_config['audio'].get(audio_provider, {}).get('app_key', ''),
+                                  on_change=set_audio_app_key, key=audio_provider + "_app_key",
+                                  args=(audio_provider, audio_provider + '_app_key'))
+
+
+with other_tab:
+    # 设置language
+    display_languages = []
+    selected_index = 0
+    for i, code in enumerate(languages.keys()):
+        display_languages.append(f"{code} - {languages[code]}")
+        if f"{code} - {languages[code]}" == st.session_state['ui_language']:
+            selected_index = i
+    # print("selected_index:", selected_index)
+    selected_language = st.selectbox(tr("Language"), options=display_languages,
+                                     index=selected_index, key='ui_language', on_change=set_ui_language)
     with st.expander("本地语音设置（其他工具可选）", expanded=False):
         # local TTS config
         local_tts_container = st.container(border=True)
@@ -434,49 +487,3 @@ with audio_container:
                                 index=selected_local_audio_recognition_compute_index,
                                 key='recognition_compute_type',
                                 on_change=set_recognition_value, args=('compute_type', 'recognition_compute_type',))
-
-
-# 设置默认的LLM
-llm_container = st.container(border=True)
-with (llm_container):
-    llm_providers = ['OpenAI', 'Moonshot', 'Azure', 'Qianfan', 'Baichuan', 'Tongyi', 'DeepSeek', 'Ollama']
-    saved_llm_provider = my_config['llm']['provider']
-    saved_llm_provider_index = 0
-    for i, provider in enumerate(llm_providers):
-        if provider == saved_llm_provider:
-            saved_llm_provider_index = i
-            break
-
-    llm_provider = st.selectbox(tr("LLM Provider"), options=llm_providers, index=saved_llm_provider_index,
-                                key='llm_provider', on_change=set_llm_provider)
-    print(llm_provider)
-
-    # 设置llm的值：
-    with st.expander(llm_provider, expanded=True):
-        tips = f"""
-               ##### {llm_provider} 配置信息
-               """
-        st.info(tips)
-        if llm_provider != 'Ollama':
-            st_llm_api_key = st.text_input(tr("API Key"),
-                                           value=my_config['llm'].get(llm_provider, {}).get('api_key', ''),
-                                           type="password", key=llm_provider + '_api_key', on_change=set_llm_key,
-                                           args=(llm_provider, llm_provider + '_api_key'))
-
-        if llm_provider == 'Qianfan':
-            st_llm_base_url = st.text_input(tr("Secret Key"),
-                                            value=my_config['llm'].get(llm_provider, {}).get('secret_key', ''),
-                                            type="password", key=llm_provider + '_secret_key', on_change=set_llm_sk,
-                                            args=(llm_provider, llm_provider + '_secret_key'))
-        else:
-            if llm_provider == 'Azure' or llm_provider == 'DeepSeek' or llm_provider == 'Ollama':
-                st_llm_base_url = st.text_input(tr("Base Url"),
-                                                value=my_config['llm'].get(llm_provider, {}).get('base_url', ''),
-                                                type="password", key=llm_provider + '_base_url',
-                                                on_change=set_llm_base_url,
-                                                args=(llm_provider, llm_provider + '_base_url'))
-
-        st_llm_model_name = st.text_input(tr("Model Name"),
-                                          value=my_config['llm'].get(llm_provider, {}).get('model_name', ''),
-                                          key=llm_provider + '_model_name', on_change=set_llm_model_name,
-                                          args=(llm_provider, llm_provider + '_model_name'))
